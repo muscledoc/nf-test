@@ -1,48 +1,49 @@
-#!/usr/bin/env nextflow
+nextflow.enable.dsl=2
 
-// Define Channels from input
-    Channel
-.fromPath(params.reference)
-    .ifEmpty { exit 1, "Cannot find input file : ${params.reference}" }
-    .set { ch_reference }
+process UNZIPGTF {
+    tag "unzip GTF"
 
-    Channel
-.fromPath(params.bamlist)
-    .ifEmpty { exit 1, "Cannot find input file : ${params.bamlist}" }
-    .splitCsv(skip:1)
-    .map {sample_name, bam_path, bai_path -> [ sample_name, file(bam_path), file(bai_path) ] }
-    .set { ch_bam }
+    input:
+    path(gtf) 
 
-    // Index reference
-process index_ref {
-        tag "Index reference"
+    output:
+    path "*.gtf"
 
-            input:
-            file(ref_path) from ch_reference
+    script:
+    """
+    gunzip $gtf 
+    """
+    // gunzip -c $gtf > genes.gtf
+}
 
-            output:
-            file "${ref_path.baseName}*" includeInputs true into ch_index
+process INDEX {
+    tag "generate BAI"
 
-            script:
-            """
-            bwa index -p $ref_path.baseName $ref_path
-            """
-    }
+    input:
+    path(bam)
 
-// Process bam files
-//process find_SV {
-//    tag "$sample_name"
-//        publishDir "${params.outdir}", mode: 'copy'
-//
-//        input:
-//        set val(sample_name), file(bam_path), file(bai_path) from ch_bam
-//        each file("*") from ch_index
-//
-//        output:
-//        file "*.vcf"
-//
-//        script:
-//        """
-//        find_sv.py -b $bam_path -o . -g ${params.build}
-//    """
-//}
+    output:
+    path "*.bai"
+
+    script:
+    """
+    samtools index ${bam}
+    """
+}
+
+
+// ref_ch = channel.of('/illumina-isi07/scratch/iKnow/refs/GRCh38.d1.vd1.fa')
+// gtf_ch = channel.of('/illumina-isi07/scratch/iKnow/refs/gencode.v41.annotation.gtf')
+
+
+//params.input = "input_file_list.txt"
+
+workflow {
+
+    input_ch = Channel
+        .fromPath(params.input)
+    
+    INDEX(input_ch)
+    INDEX.out.view()
+}
+
